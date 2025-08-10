@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Coding Stream</title>
+</head>
+<body>
+
+<div>
+    <button id="create-session">Create Session</button>
+
+    <div style="display: none" id="session-id-enter">
+        <label for="session_id">Enter Session ID</label>
+        <input type="text" id="session_id">
+        <button id="start-session">Start Session</button>
+    </div>
+</div>
+
+<script>
+    const createSessionBtn = document.getElementById('create-session');
+    const startSessionBtn = document.getElementById('start-session');
+
+    // 1. Show input for session ID
+    createSessionBtn.onclick = function () {
+        document.getElementById("session-id-enter").style.display = 'block';
+    };
+
+    // 2. Start session based on input
+    startSessionBtn.onclick = function () {
+        const sessionID = document.getElementById('session_id').value.trim();
+
+        if (sessionID !== "") {
+            fetch("http://127.0.0.1:8000/session", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ session_id: sessionID })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Session started:", data);
+                // redirect or show editor
+            })
+            .catch(error => {
+                console.error("Failed to start session:", error);
+            });
+        } else {
+            alert("Please enter a session ID.");
+        }
+    };
+</script>
+
+</body>
+</html>
