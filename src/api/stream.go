@@ -1,6 +1,7 @@
 package api
 
 import (
+	"CodeStream/src"
 	"CodeStream/src/resources"
 	"encoding/json"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -25,12 +25,11 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	ID       string
 	Username string
 	Conn     *websocket.Conn
 	Hub      *Hub
-	Send     chan []byte // Buffered channel for outbound messages
-	mu       sync.Mutex  // Protects writes to websocket
+	Send     chan []byte
+	mu       sync.Mutex
 }
 
 type Hub struct {
@@ -55,10 +54,9 @@ type Message struct {
 
 var (
 	Sessions   = make(map[string]*Hub)
-	sessionsMu sync.RWMutex // Protects Sessions map
+	sessionsMu sync.RWMutex
 )
 
-// Constants for timeouts and buffer sizes
 const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
@@ -68,7 +66,7 @@ const (
 )
 
 func NewHub(sessionID string, cache *resources.Cache) (*Hub, error) {
-	interview, err, _ := resources.GetOrCreateInterviewSession(cache, sessionID)
+	interview, err, _ := resources.CreateInterviewSession(cache, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create interview session: %w", err)
 	}
@@ -93,14 +91,13 @@ func GetHub(sessionID string, cache *resources.Cache) (*Hub, error) {
 		return hub, nil
 	}
 
-	// Create new hub
 	hub, err := NewHub(sessionID, cache)
 	if err != nil {
 		return nil, err
 	}
 
 	Sessions[sessionID] = hub
-	go hub.run() // Start the hub goroutine
+	go hub.run()
 
 	return hub, nil
 }
@@ -164,7 +161,7 @@ func (h *Hub) run() {
 				delete(Sessions, h.SessionID)
 				sessionsMu.Unlock()
 				log.Printf("Session %s cleaned up", h.SessionID)
-				return // Exit hub goroutine
+				return
 			}
 
 		case message := <-h.broadcast:
@@ -208,7 +205,6 @@ func (h *Hub) broadcastToOthers(sender *Client, msg []byte) {
 		if client != sender {
 			select {
 			case client.Send <- msg:
-				// Message queued successfully
 			default:
 				// Channel full, client will be cleaned up in next broadcast cycle
 				log.Printf("Client %s channel full, will be cleaned up", client.Username)
@@ -219,7 +215,6 @@ func (h *Hub) broadcastToOthers(sender *Client, msg []byte) {
 
 func (h *Hub) Shutdown() {
 	close(h.shutdown)
-	// Wait for hub to finish
 	select {
 	case <-h.done:
 	case <-time.After(5 * time.Second):
@@ -244,7 +239,6 @@ func (c *Client) writePump() {
 				return
 			}
 
-			// Use client mutex to protect websocket writes
 			c.mu.Lock()
 			err := c.Conn.WriteMessage(websocket.TextMessage, message)
 			c.mu.Unlock()
@@ -292,7 +286,6 @@ func (c *Client) readPump() {
 			break
 		}
 
-		// Process different message types
 		switch msg.Type {
 		case "code_patch":
 			if err := c.processCodePatch(msg); err != nil {
@@ -311,8 +304,12 @@ func (c *Client) readPump() {
 					}
 				}
 			}
+		case "code_run":
+			c.processRunCode()
 		case "cursor_position":
 			c.processCursorPosition(msg)
+		case "cursor_select":
+			c.processCursorSelect(msg)
 
 		case "edit_lang":
 			c.processEditLang(msg)
@@ -326,17 +323,80 @@ func (c *Client) readPump() {
 	}
 }
 
+func (c *Client) processRunCode() {
+	if !c.Hub.Interview.CanRun() {
+		errorMsg := Message{
+			Type: "error",
+			Data: map[string]interface{}{
+				"message": fmt.Sprintf("Rate limit exceeded"),
+			},
+		}
+		msgBytes, _ := json.Marshal(errorMsg)
+		c.Send <- msgBytes
+		return
+	}
+
+	c.Hub.interviewMu.Lock()
+	currentCode := c.Hub.Interview.CompactCodePatches()
+	c.Hub.interviewMu.Unlock()
+
+	if currentCode == "" {
+		msg := Message{
+			Type: "code_run",
+			Data: map[string]interface{}{
+				"std_out":   "",
+				"std_err":   "",
+				"exit_code": -1,
+				"error":     "empty code",
+				"duration":  "0.00",
+			},
+		}
+		msgBytes, _ := json.Marshal(msg)
+		c.Send <- msgBytes
+		return
+	}
+
+	req := resources.RunRequest{Language: c.Hub.Interview.Language, Code: currentCode}
+
+	resp, err := resources.RunUserCode(c.Hub.Interview.Cache.Ctx, src.Config.CodeWorkDir, req)
+	if err != nil {
+		errorMsg := Message{
+			Type: "error",
+			Data: map[string]interface{}{
+				"message": err.Error(),
+			},
+		}
+		msgBytes, _ := json.Marshal(errorMsg)
+		c.Send <- msgBytes
+		return
+	}
+
+	msg := Message{
+		Type: "code_res",
+		Data: map[string]interface{}{
+			"std_out":   resp.Stdout,
+			"std_err":   resp.Stderr,
+			"exit_code": resp.ExitCode,
+			"error":     resp.Error,
+			"duration":  resp.Duration,
+		},
+	}
+	msgBytes, _ := json.Marshal(msg)
+
+	c.Send <- msgBytes
+	c.Hub.broadcastToOthers(c, msgBytes)
+
+}
+
 func (c *Client) sendCurrentState() {
-	// Send initial session data with current code state
 	c.Hub.interviewMu.Lock()
 	currentCode, patches, version, err := c.Hub.Interview.GetCurrentCode()
 	c.Hub.interviewMu.Unlock()
 
-	users := []map[string]string{}
+	var users []map[string]string
 	for user, _ := range c.Hub.Clients {
 		users = append(users, map[string]string{
 			"username": user.Username,
-			"id":       user.ID,
 		})
 	}
 
@@ -344,7 +404,6 @@ func (c *Client) sendCurrentState() {
 		Type: "session_init",
 		Data: map[string]interface{}{
 			"session_id":   c.Hub.SessionID,
-			"user_id":      c.ID,
 			"current_code": currentCode,
 			"lang":         c.Hub.Interview.Language,
 			"version":      version,
@@ -356,7 +415,6 @@ func (c *Client) sendCurrentState() {
 	if err != nil {
 		initialData.Data = map[string]interface{}{
 			"session_id": c.Hub.SessionID,
-			"user_id":    c.ID,
 			"error":      "Failed to load current code state",
 		}
 	}
@@ -414,13 +472,54 @@ func (c *Client) processCodePatch(msg Message) error {
 	return nil
 }
 
+func (c *Client) processCursorSelect(msg Message) {
+	startVal, ok := msg.Data["start_pos"]
+	if !ok {
+		log.Printf("Missing start_pos data in cursor_position message from %s", c.Username)
+		return
+	}
+	startFloat, ok := startVal.(float64)
+	if !ok {
+		log.Printf("Invalid start_pos type in cursor_position message from %s", c.Username)
+		return
+	}
+	startPos := int(startFloat)
+
+	endVal, ok := msg.Data["end_pos"]
+	if !ok {
+		log.Printf("Missing end_pos data in cursor_position message from %s", c.Username)
+		return
+	}
+	endFloat, ok := endVal.(float64)
+	if !ok {
+		log.Printf("Invalid end_pos type in cursor_position message from %s", c.Username)
+		return
+	}
+	endPos := int(endFloat)
+	broadcastMsg := Message{
+		Type: "cursor_select",
+		Data: map[string]interface{}{
+			"username":  c.Username,
+			"start_pos": startPos,
+			"end_pos":   endPos,
+		},
+	}
+	msgBytes, _ := json.Marshal(broadcastMsg)
+	c.Hub.broadcastToOthers(c, msgBytes)
+}
+
 func (c *Client) processCursorPosition(msg Message) {
-	position, ok := msg.Data["position"]
+	posVal, ok := msg.Data["position"]
 	if !ok {
 		log.Printf("Missing position data in cursor_position message from %s", c.Username)
 		return
 	}
 
+	position, ok := posVal.(int)
+	if !ok {
+		log.Printf("Invalid position type in cursor_position message from %s", c.Username)
+		return
+	}
 	broadcastMsg := Message{
 		Type: "cursor_position",
 		Data: map[string]interface{}{
@@ -473,15 +572,14 @@ func (c *Client) processEditLang(msg Message) {
 		return
 	}
 
-	// Broadcast the language change to all clients
 	broadcastMsg := Message{
-		Type: "lang_change",
+		Type: "edit_lang",
 		Data: map[string]interface{}{
 			"lang": newLang,
 		},
 	}
 	msgBytes, _ := json.Marshal(broadcastMsg)
-	c.Hub.broadcast <- msgBytes
+	c.Hub.broadcastToOthers(c, msgBytes)
 }
 
 func LiveStreamCoding(c *gin.Context) {
@@ -507,6 +605,14 @@ func LiveStreamCoding(c *gin.Context) {
 		return
 	}
 
+	ttl := cache.GetTTL(fmt.Sprintf("session:%s:state", sessionID))
+	timer := time.AfterFunc(ttl, func() {
+		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "Session expired"))
+		_ = conn.Close()
+	})
+
+	defer timer.Stop()
+
 	hub, err := GetHub(sessionID, cache)
 	if err != nil {
 		log.Printf("Failed to get hub for session %s: %v", sessionID, err)
@@ -518,7 +624,6 @@ func LiveStreamCoding(c *gin.Context) {
 		Username: username,
 		Conn:     conn,
 		Hub:      hub,
-		ID:       username + strconv.FormatInt(time.Now().UnixNano(), 10),
 		Send:     make(chan []byte, sendBufferSize),
 	}
 

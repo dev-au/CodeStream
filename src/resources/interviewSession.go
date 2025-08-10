@@ -16,7 +16,6 @@ type Interview struct {
 	VersionCacheKey string
 	PatchKey        string
 	LanguageKey     string
-	UntilExpire     time.Duration
 	Cache           *Cache
 }
 
@@ -33,7 +32,7 @@ type CodeState struct {
 	Version int64  `json:"version"`
 }
 
-func GetOrCreateInterviewSession(c *Cache, sessionID string) (Interview, error, bool) {
+func CreateInterviewSession(c *Cache, sessionID string) (Interview, error, bool) {
 	defaultLanguage := src.Config.Languages[0]
 	stateKey := fmt.Sprintf("session:%s:state", sessionID)
 	currentLanguageKey := fmt.Sprintf("session:%s:lang", sessionID)
@@ -45,7 +44,7 @@ func GetOrCreateInterviewSession(c *Cache, sessionID string) (Interview, error, 
 		return Interview{}, err, false
 	}
 	if exists > 0 {
-		existInterview, err := getInterviewSession(c, sessionID)
+		existInterview, err := GetInterviewSession(c, sessionID)
 		if err != nil {
 			return Interview{}, err, false
 		}
@@ -66,6 +65,8 @@ func GetOrCreateInterviewSession(c *Cache, sessionID string) (Interview, error, 
 	pipe.Set(c.Ctx, stateKey, stateJSON, time.Hour*24)
 	pipe.Set(c.Ctx, versionKey, state.Version, time.Hour*24)
 	pipe.Set(c.Ctx, currentLanguageKey, defaultLanguage, time.Hour*24)
+	pipe.LPush(c.Ctx, patchKey, "", time.Hour*24)
+	pipe.LTrim(c.Ctx, patchKey, 1, 0)
 	_, err = pipe.Exec(c.Ctx)
 	return Interview{
 		SessionID:       sessionID,
@@ -76,7 +77,6 @@ func GetOrCreateInterviewSession(c *Cache, sessionID string) (Interview, error, 
 		PatchKey:        patchKey,
 		VersionCacheKey: versionKey,
 		LanguageKey:     currentLanguageKey,
-		UntilExpire:     time.Hour * 24,
 	}, nil, true
 }
 
@@ -84,13 +84,14 @@ func (interview *Interview) EditLanguage(newLang string) error {
 	for _, lang := range src.Config.Languages {
 		if lang == newLang {
 			interview.Cache.Set(interview.LanguageKey, newLang, time.Hour*24)
+			interview.Language = lang
 			return nil
 		}
 	}
 	return fmt.Errorf("not found language")
 }
 
-func getInterviewSession(c *Cache, sessionID string) (Interview, error) {
+func GetInterviewSession(c *Cache, sessionID string) (Interview, error) {
 	stateKey := fmt.Sprintf("session:%s:state", sessionID)
 	currentLanguageKey := fmt.Sprintf("session:%s:lang", sessionID)
 	versionKey := fmt.Sprintf("session:%s:version", sessionID)
@@ -105,7 +106,6 @@ func getInterviewSession(c *Cache, sessionID string) (Interview, error) {
 		return Interview{}, fmt.Errorf("language is not a string")
 	}
 
-	// Get version
 	versionVal := c.Get(versionKey)
 	if versionVal == nil {
 		return Interview{}, fmt.Errorf("failed to get version: %w")
@@ -118,7 +118,6 @@ func getInterviewSession(c *Cache, sessionID string) (Interview, error) {
 	if err != nil {
 		return Interview{}, fmt.Errorf("invalid version format: %w", err)
 	}
-	ttl := c.GetTTL(stateKey)
 
 	return Interview{
 		SessionID:       sessionID,
@@ -129,6 +128,5 @@ func getInterviewSession(c *Cache, sessionID string) (Interview, error) {
 		PatchKey:        patchKey,
 		LanguageKey:     currentLanguageKey,
 		Cache:           c,
-		UntilExpire:     ttl,
 	}, nil
 }

@@ -1,19 +1,23 @@
 package src
 
 import (
-	"github.com/joho/godotenv"
 	"log"
 	"os"
+	"strconv"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 var Config envData
 
 type envData struct {
-	Port            string   `env:"PORT" envDefault:"8000"`
-	RedisUrl        string   `env:"REDIS_URL"`
-	ApplicationMode string   `env:"APPLICATION_MODE"`
-	Languages       []string `env:"LANGUAGES"`
+	Port             string   `env:"PORT" envDefault:"8000"`
+	RedisUrl         string   `env:"REDIS_URL"`
+	ApplicationMode  string   `env:"APPLICATION_MODE"`
+	Languages        []string `env:"LANGUAGES"`
+	CodeWorkDir      string   `env:"CODE_WORK_DIR"`
+	RunTimeoutSecond int      `env:"RUN_TIMEOUT_SECOND"`
 }
 
 func (envData) SetupEnv() {
@@ -21,11 +25,14 @@ func (envData) SetupEnv() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+	runTimeoutSecond, _ := strconv.Atoi(os.Getenv("RUN_TIMEOUT_SECOND"))
 
 	Config = envData{
-		Port:            os.Getenv("PORT"),
-		RedisUrl:        os.Getenv("REDIS_URL"),
-		ApplicationMode: os.Getenv("APPLICATION_MODE"),
-		Languages:       strings.Split(os.Getenv("LANGUAGES"), ","),
+		Port:             os.Getenv("PORT"),
+		RedisUrl:         os.Getenv("REDIS_URL"),
+		ApplicationMode:  os.Getenv("APPLICATION_MODE"),
+		Languages:        strings.Split(os.Getenv("LANGUAGES"), ","),
+		CodeWorkDir:      os.Getenv("CODE_WORK_DIR"),
+		RunTimeoutSecond: runTimeoutSecond,
 	}
 }

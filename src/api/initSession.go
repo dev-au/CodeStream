@@ -21,7 +21,7 @@ func CreateSession(c *gin.Context) {
 		return
 	}
 	cache := resources.NewCacheContext()
-	interview, err, created := resources.GetOrCreateInterviewSession(cache, body.SessionID)
+	interview, err, created := resources.CreateInterviewSession(cache, body.SessionID)
 	if !created {
 		c.JSON(400, gin.H{"error": "session already exists"})
 		return

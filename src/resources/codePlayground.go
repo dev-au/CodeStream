@@ -2,8 +2,10 @@ package resources
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -12,6 +14,16 @@ var validOperations = map[string]bool{
 	"add":     true,
 	"remove":  true,
 	"replace": true,
+}
+
+func (interview *Interview) CanRun() bool {
+	runKey := fmt.Sprintf("session:%s:run", interview.SessionID)
+	exists := interview.Cache.Exists(runKey)
+	if exists {
+		return false
+	}
+	interview.Cache.Set(runKey, "", time.Second*3)
+	return true
 }
 
 func (interview *Interview) AddCodePatch(patch CodePatch) error {
@@ -26,11 +38,10 @@ func (interview *Interview) AddCodePatch(patch CodePatch) error {
 
 	return c.Client.Watch(c.Ctx, func(tx *redis.Tx) error {
 		currentVersion, err := tx.Get(c.Ctx, interview.VersionCacheKey).Int64()
-		if err != nil && err != redis.Nil {
+		if err != nil && !errors.Is(err, redis.Nil) {
 			return err
 		}
 
-		// Check if patch is based on the correct version
 		if patch.Version != 0 && patch.Version-1 != currentVersion {
 			return fmt.Errorf("version mismatch: patch version %d, expected base %d", patch.Version, currentVersion)
 		}
@@ -39,7 +50,7 @@ func (interview *Interview) AddCodePatch(patch CodePatch) error {
 		patch.Version = newVersion
 
 		pipe := tx.TxPipeline()
-		pipe.Set(c.Ctx, interview.VersionCacheKey, newVersion, interview.UntilExpire)
+		pipe.Set(c.Ctx, interview.VersionCacheKey, newVersion, redis.KeepTTL)
 
 		patchJSON, err := json.Marshal(patch)
 		if err != nil {
@@ -47,7 +58,6 @@ func (interview *Interview) AddCodePatch(patch CodePatch) error {
 		}
 
 		pipe.LPush(c.Ctx, interview.PatchKey, patchJSON)
-		pipe.Expire(c.Ctx, interview.PatchKey, interview.UntilExpire)
 
 		_, err = pipe.Exec(c.Ctx)
 		if err != nil {
@@ -62,12 +72,12 @@ func (interview *Interview) AddCodePatch(patch CodePatch) error {
 		return nil
 	})
 }
-func (interview *Interview) CompactCodePatches() {
+func (interview *Interview) CompactCodePatches() string {
 	c := interview.Cache
 
 	code, err := interview.rebuildCodeFromPatches()
 	if err != nil {
-		return
+		return ""
 	}
 	pipe := c.Client.TxPipeline()
 
@@ -77,14 +87,14 @@ func (interview *Interview) CompactCodePatches() {
 	}
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
-		return
+		return ""
 	}
 
-	pipe.Set(c.Ctx, interview.StateCacheKey, stateJSON, interview.UntilExpire)
-	pipe.Del(c.Ctx, interview.PatchKey)
+	pipe.Set(c.Ctx, interview.StateCacheKey, stateJSON, redis.KeepTTL)
+	pipe.LTrim(c.Ctx, interview.PatchKey, 1, 0)
 
 	_, err = pipe.Exec(c.Ctx)
-	return
+	return code
 }
 
 func (interview *Interview) rebuildCodeFromPatches() (string, error) {

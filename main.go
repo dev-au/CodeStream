@@ -5,6 +5,7 @@ import (
 	"CodeStream/src/api"
 	"CodeStream/src/resources"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +15,10 @@ func main() {
 
 	src.Config.SetupEnv()
 	resources.SetupRedis()
+
+	if err := os.MkdirAll(src.Config.CodeWorkDir, 0755); err != nil {
+		panic(err)
+	}
 
 	gin.SetMode(src.Config.ApplicationMode)
 	ginEngine := gin.Default()

@@ -7,18 +7,77 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/theme/monokai.min.css">
-</head>
-<body class="bg-dark text-light">
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #f8f8f2;
+        }
 
-<div class="container-fluid">
+        .card {
+            background-color: #2d2d2d;
+            border: 1px solid #444;
+        }
+
+        .list-group-item {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            border-bottom: 1px solid #444;
+        }
+
+        .CodeMirror {
+            height: 500px;
+            border: 1px solid #444;
+            font-size: 14px;
+        }
+
+        #output-console {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #1e1e1e;
+            border: 1px solid #444;
+            padding: 10px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            color: #f8f8f2;
+        }
+
+        .btn-primary {
+            background-color: #66d9ef;
+            border-color: #66d9ef;
+        }
+
+        .btn-primary:hover {
+            background-color: #4db5d1;
+            border-color: #4db5d1;
+        }
+
+        .btn-success {
+            background-color: #a6e22e;
+            border-color: #a6e22e;
+        }
+
+        .btn-success:hover {
+            background-color: #8cc51e;
+            border-color: #8cc51e;
+        }
+
+        #users-list .cursor-info {
+            font-size: 0.8em;
+            color: #fd971f;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid mt-3">
     <div class="row">
         <div class="col-12">
-            <h1>Live Code Streaming - Session: <span id="session-id"></span></h1>
+            <h1 class="text-center">Live Code Streaming - Session: <span id="session-id"></span></h1>
         </div>
     </div>
     <div class="row">
         <div class="col-3">
-            <div class="card bg-secondary text-light">
+            <div class="card">
                 <div class="card-header">Online Users</div>
                 <ul id="users-list" class="list-group list-group-flush"></ul>
             </div>
@@ -30,10 +89,24 @@
                     <!-- Add more language options as needed -->
                 </select>
             </div>
-            <button id="refresh-btn" class="btn btn-primary mt-3">Refresh</button>
+            <div class="mt-3 d-flex justify-content-between">
+                <button id="refresh-btn" class="btn btn-primary">Refresh</button>
+                <button id="run-btn" class="btn btn-success">Run Code</button>
+            </div>
         </div>
         <div class="col-9">
-            <div id="coding-box"></div>
+            <div class="card">
+                <div class="card-header">Code Editor</div>
+                <div class="card-body p-0">
+                    <div id="coding-box"></div>
+                </div>
+            </div>
+            <div class="card mt-3">
+                <div class="card-header">Output Console</div>
+                <div class="card-body p-0">
+                    <pre id="output-console">Waiting for code execution...</pre>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -54,7 +127,7 @@
                 lineNumbers: true,
                 indentUnit: 4,
                 indentWithTabs: true,
-                extraKeys: { "Tab": "indentMore", "Shift-Tab": "indentLess" }
+                extraKeys: {"Tab": "indentMore", "Shift-Tab": "indentLess"}
             });
             this.isUpdating = false;
             this.syncedContent = "";
@@ -109,11 +182,11 @@
         }
 
         if (deletedText.length === 0) {
-            return { op: 'add', start_pos: start, content: insertedText };
+            return {op: 'add', start_pos: start, content: insertedText};
         } else if (insertedText.length === 0) {
-            return { op: 'remove', start_pos: start, end_pos: oldEnd };
+            return {op: 'remove', start_pos: start, end_pos: oldEnd};
         } else {
-            return { op: 'replace', start_pos: start, end_pos: oldEnd, content: insertedText };
+            return {op: 'replace', start_pos: start, end_pos: oldEnd, content: insertedText};
         }
     }
 
@@ -134,12 +207,26 @@
     document.getElementById('session-id').textContent = sessionID;
     let username = "User" + Math.random().toString().slice(2, 8);
     let currentVersion = 0;
-    let users = [];
+    let users = new Map();  // Use Map to store user data including cursor and selection
 
     function updateUsersList() {
-        document.getElementById('users-list').innerHTML = users.map(u =>
-            `<li class="list-group-item bg-secondary text-light">${u.username} ${u.cursor !== undefined ? `(cursor: ${u.cursor})` : ''}</li>`
-        ).join('');
+        const list = document.getElementById('users-list');
+        list.innerHTML = '';
+        users.forEach((userData, userName) => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            li.textContent = userName;
+            if (userData.cursor !== undefined) {
+                const cursorInfo = document.createElement('span');
+                cursorInfo.className = 'cursor-info';
+                cursorInfo.textContent = ` (cursor: ${userData.cursor})`;
+                if (userData.selectionStart !== undefined && userData.selectionEnd !== undefined && userData.selectionStart !== userData.selectionEnd) {
+                    cursorInfo.textContent += ` [selection: ${userData.selectionStart}-${userData.selectionEnd}]`;
+                }
+                li.appendChild(cursorInfo);
+            }
+            list.appendChild(li);
+        });
     }
 
     let ws = new WebSocket(`ws://localhost:8000/ws?session_id=${sessionID}&username=${username}`);
@@ -157,7 +244,7 @@
                     box.applyPatch(patches[i]);
                 }
                 currentVersion = d.version || 0;
-                users = d.users || [];
+                (d.users || []).forEach(u => users.set(u.username, {}));
                 updateUsersList();
                 if (d.lang) {
                     box.setLanguage(d.lang);
@@ -176,34 +263,61 @@
                 break;
 
             case 'user_joined':
-                users.push({ username: d.username });
+                users.set(d.username, {});
                 updateUsersList();
                 break;
 
             case 'user_left':
-                users = users.filter(u => u.username !== d.username);
+                users.delete(d.username);
                 updateUsersList();
                 break;
 
             case 'cursor_position':
-                const user = users.find(u => u.username === d.username);
-                if (user) {
-                    user.cursor = d.position;
+                const userPos = users.get(d.username);
+                if (userPos) {
+                    userPos.cursor = d.position;
+                    delete userPos.selectionStart;
+                    delete userPos.selectionEnd;
                     updateUsersList();
                 }
                 break;
 
-            case 'lang_change':
+            case 'cursor_select':
+                const userSel = users.get(d.username);
+                if (userSel) {
+                    userSel.selectionStart = d.start_pos;
+                    userSel.selectionEnd = d.end_pos;
+                    userSel.cursor = d.start_pos;  // Use start as cursor for display
+                    updateUsersList();
+                }
+                break;
+
+            case 'edit_lang':
                 box.setLanguage(d.lang);
                 document.getElementById('lang-select').value = d.lang;
                 break;
 
+            case 'code_res':
+                displayOutput(d);
+                break;
+
             case 'error':
-                alert(d.message);
+                alert(d.message || 'An error occurred');
                 break;
         }
-        console.log(currentVersion);
     });
+
+    function displayOutput(data) {
+        const consoleEl = document.getElementById('output-console');
+        let output = '';
+        if (data.std_out) output += `Stdout:\n${data.std_out}\n\n`;
+        if (data.std_err) output += `Stderr:\n${data.std_err}\n\n`;
+        if (data.exit_code !== undefined) output += `Exit Code: ${data.exit_code}\n`;
+        if (data.duration) output += `Duration: ${data.duration}\n`;
+        if (data.memory) output += `Memory: ${data.memory}\n`;
+        if (data.error) output += `Error: ${data.error}\n`;
+        consoleEl.textContent = output || 'No output';
+    }
 
     let debounceTimer = null;
     box.editor.on('change', () => {
@@ -220,18 +334,30 @@
                 }));
                 box.syncedContent = newContent;
                 currentVersion = patch.version;
-                console.log('Sent patch:', patch);
             }
         }, 100);
     });
 
     const sendCursor = throttle(() => {
         const doc = box.editor.getDoc();
-        const pos = doc.indexFromPos(doc.getCursor());
-        ws.send(JSON.stringify({
-            type: 'cursor_position',
-            data: { position: pos }
-        }));
+        const selections = doc.listSelections();
+        if (selections.length > 0) {
+            const head = doc.indexFromPos(selections[0].head);
+            const anchor = doc.indexFromPos(selections[0].anchor);
+            if (head !== anchor) {
+                const start = Math.min(head, anchor);
+                const end = Math.max(head, anchor);
+                ws.send(JSON.stringify({
+                    type: 'cursor_select',
+                    data: {start_pos: start, end_pos: end}
+                }));
+            } else {
+                ws.send(JSON.stringify({
+                    type: 'cursor_position',
+                    data: {position: head}
+                }));
+            }
+        }
     }, 200);
 
     box.editor.on('cursorActivity', sendCursor);
@@ -239,13 +365,21 @@
     document.getElementById('lang-select').addEventListener('change', (e) => {
         ws.send(JSON.stringify({
             type: 'edit_lang',
-            data: { lang: e.target.value }
+            data: {lang: e.target.value}
         }));
+        box.setLanguage(e.target.value);
+        document.getElementById('lang-select').value = e.target.value;
     });
 
     document.getElementById('refresh-btn').addEventListener('click', () => {
         ws.send(JSON.stringify({
             type: 'refresh'
+        }));
+    });
+
+    document.getElementById('run-btn').addEventListener('click', () => {
+        ws.send(JSON.stringify({
+            type: 'code_run'
         }));
     });
 
