@@ -3,7 +3,7 @@ services:
     image: livecodingapp:latest
     build: .
     ports:
-      - "8080:8080"
+      - "8000:${PORT}"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped

@@ -29,7 +29,7 @@ func main() {
 	ginEngine.GET("/ws", api.LiveStreamCoding)
 
 	s := &http.Server{
-		Addr:           ":" + src.Config.Port,
+		Addr:           ":8000",
 		Handler:        ginEngine,
 		ReadTimeout:    10 * time.Second,
 		WriteTimeout:   10 * time.Second,
