@@ -9,6 +9,7 @@ COPY . .
 RUN go build -o main .
 
 FROM alpine:latest
+RUN apk add --no-cache docker-cli bash
 WORKDIR /root/
 COPY --from=builder /app/main .
 COPY .env .

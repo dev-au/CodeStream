@@ -600,8 +600,8 @@
         });
     }
 
+    // let ws = new WebSocket(`ws://localhost:8001/ws?session_id=${sessionID}`);
     let ws = new WebSocket(`wss://interview.bigdev.uz/ws?session_id=${sessionID}`);
-
     ws.addEventListener('close', () => {
         document.body.innerHTML = ""
         alert("Connection closed, please refresh page")
