@@ -53,7 +53,6 @@ func (lw *LimitedWriter) Write(p []byte) (int, error) {
 	}
 	return lw.Buf.Write(p)
 }
-
 func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunResponse, error) {
 	lang, ok := runners[req.Language]
 	if !ok {
@@ -74,8 +73,10 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 	}
 
 	containerPath := "/app/" + fname
+	containerName := "job-" + jobID
+
 	dockerArgs := []string{
-		"run", "--rm",
+		"run", "--rm", "--name", containerName,
 		"--network=none",
 		"--pids-limit=64",
 		"--memory=25m",
@@ -91,7 +92,7 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Duration(src.Config.RunTimeoutSecond)*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctxTimeout, "docker", dockerArgs...)
+	cmd := exec.Command("docker", dockerArgs...)
 	cmd.Stdin = nil
 
 	const outputLimit = 8 * 1024
@@ -100,38 +101,51 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 	cmd.Stdout = stdoutLimit
 	cmd.Stderr = stderrLimit
 
+	errCh := make(chan error, 1)
 	start := time.Now()
-	err := cmd.Run()
-	duration := time.Since(start)
 
-	res := &RunResponse{
-		Stdout:   stdoutLimit.Buf.String(),
-		Stderr:   stderrLimit.Buf.String(),
-		ExitCode: 0,
-		Duration: duration.String(),
-	}
+	go func() {
+		errCh <- cmd.Run()
+	}()
 
-	if stdoutLimit.Hit || stderrLimit.Hit {
-		res.Error = "output limit exceeded"
-		res.ExitCode = -1
-		res.Stdout = ""
-		return res, errors.New("output limit exceeded")
-	}
+	select {
+	case <-ctxTimeout.Done():
+		exec.Command("docker", "kill", containerName).Run()
+		return &RunResponse{
+			Error:    "Time Limit Error",
+			ExitCode: -1,
+			Duration: time.Since(start).String(),
+		}, nil
 
-	if errors.Is(ctxTimeout.Err(), context.DeadlineExceeded) {
-		res.Error = "timeout"
-		res.ExitCode = -1
-		return res, errors.New("timeout")
-	}
-
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			res.ExitCode = exitErr.ExitCode()
+	case err := <-errCh:
+		exec.Command("docker", "kill", containerName).Run()
+		duration := time.Since(start)
+		res := &RunResponse{
+			Stdout:   stdoutLimit.Buf.String(),
+			Stderr:   stderrLimit.Buf.String(),
+			Duration: duration.String(),
+			ExitCode: 0,
 		}
-	}
 
-	return res, nil
+		if stdoutLimit.Hit || stderrLimit.Hit {
+			res.Error = "Output Limit Error"
+			res.ExitCode = -1
+			res.Stdout = ""
+			return res, nil
+		}
+
+		if err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				res.ExitCode = exitErr.ExitCode()
+			}
+		}
+		if res.ExitCode == 137 {
+			res.Error = "Memory Limit Error"
+		}
+
+		return res, nil
+	}
 }
 
 func filenameForLang(lang string) string {

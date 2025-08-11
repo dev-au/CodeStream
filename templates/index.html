@@ -3,53 +3,738 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Coding Stream</title>
+    <title>Live Code Streaming - Home</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+    <style>
+        :root {
+            --bg-primary: #0f0f0f;
+            --bg-secondary: #1a1a1a;
+            --bg-tertiary: #2d2d2d;
+            --text-primary: #ffffff;
+            --text-secondary: #b3b3b3;
+            --border-color: #404040;
+            --accent-color: #007acc;
+            --accent-hover: #005a9e;
+            --success-color: #28a745;
+            --success-hover: #218838;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+        }
+
+        [data-theme="light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-tertiary: #ffffff;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --border-color: #dee2e6;
+            --accent-color: #0d6efd;
+            --accent-hover: #0b5ed7;
+            --success-color: #198754;
+            --success-hover: #157347;
+            --warning-color: #fd7e14;
+            --danger-color: #dc3545;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+            min-height: 100vh;
+        }
+
+        .top-bar {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .brand-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .theme-toggle {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .theme-toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .theme-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .theme-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .theme-slider {
+            background-color: var(--accent-color);
+        }
+
+        input:checked + .theme-slider:before {
+            transform: translateX(26px);
+        }
+
+        .main-content {
+            padding: 40px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .hero-section {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .hero-title {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, var(--accent-color), var(--success-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        .create-session-btn {
+            background: linear-gradient(135deg, var(--success-color), var(--accent-color));
+            border: none;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 15px 40px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .create-session-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 123, 204, 0.3);
+            color: white;
+        }
+
+        .create-session-btn:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .create-session-btn:disabled {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .create-session-btn:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .g-recaptcha {
+            transform: scale(0.9);
+            transform-origin: center;
+        }
+
+        @media (max-width: 768px) {
+            .g-recaptcha {
+                transform: scale(0.77);
+                transform-origin: center;
+            }
+        }
+
+        .sessions-section {
+            margin-top: 60px;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 30px;
+            color: var(--text-primary);
+            text-align: center;
+        }
+
+        .card {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+            border-color: var(--accent-color);
+        }
+
+        .session-card {
+            padding: 20px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .session-id {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+
+        .session-time {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .session-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-sm-custom {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            border-radius: 6px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .btn-primary-custom {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary-custom:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+            color: white;
+        }
+
+        .btn-secondary-custom {
+            background-color: var(--bg-secondary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary-custom:hover {
+            background-color: var(--border-color);
+            color: var(--text-primary);
+            transform: translateY(-1px);
+        }
+
+        .btn-danger-custom {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger-custom:hover {
+            background-color: #c82333;
+            transform: translateY(-1px);
+            color: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
+        .modal-content {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+
+        .modal-header {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-footer {
+            border-top: 1px solid var(--border-color);
+        }
+
+        .form-control {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 6px;
+        }
+
+        .form-control:focus {
+            background-color: var(--bg-secondary);
+            border-color: var(--accent-color);
+            color: var(--text-primary);
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 204, 0.25);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--success-color);
+            display: inline-block;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .loading-spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top: 2px solid var(--text-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .hero-title {
+                font-size: 2rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1rem;
+            }
+
+            .main-content {
+                padding: 20px 15px;
+            }
+
+            .session-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .session-actions {
+                align-self: flex-end;
+            }
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+    </style>
 </head>
-<body>
+<body data-theme="light">
 
-<div>
-    <button id="create-session">Create Session</button>
+<div class="top-bar">
+    <h1 class="brand-title">
+        <span class="status-indicator"></span>
+        Live Code Streaming
+    </h1>
 
-    <div style="display: none" id="session-id-enter">
-        <label for="session_id">Enter Session ID</label>
-        <input type="text" id="session_id">
-        <button id="start-session">Start Session</button>
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <label style="color: var(--text-secondary); font-weight: 500; margin: 0;">Theme:</label>
+        <label class="theme-toggle">
+            <input type="checkbox" id="theme-toggle">
+            <span class="theme-slider"></span>
+        </label>
     </div>
 </div>
 
+<div class="main-content">
+    <div class="hero-section">
+        <h1 class="hero-title">Live Code Streaming</h1>
+        <p class="hero-subtitle">
+            Collaborate in real-time with multiple developers. Share code, execute programs, and build together in a seamless environment.
+        </p>
+        <div style="margin-bottom: 20px;">
+            <div class="g-recaptcha" data-sitekey="6Ld2zqErAAAAAFOhDoWu8RtJKB5JXulaqtzkOCW3" data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired" style="display: inline-block;"></div>
+        </div>
+        <button class="create-session-btn" id="create-session-btn" disabled>
+            <div class="loading-spinner" id="loading-spinner"></div>
+            <span id="btn-text">🔒 Complete CAPTCHA to Create Session</span>
+        </button>
+    </div>
+
+    <div class="sessions-section">
+        <h2 class="section-title">Recent Sessions (Last 24 Hours)</h2>
+        <div id="sessions-container">
+            <div class="empty-state">
+                <div class="empty-icon">📝</div>
+                <h4>No recent sessions</h4>
+                <p>Create your first coding session to get started!</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Session Created Modal -->
+<div class="modal fade" id="sessionModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">🎉 Session Created Successfully!</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">Your coding session has been created. Share this link with others to collaborate:</p>
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="session-link" readonly>
+                    <button class="btn btn-primary-custom" type="button" id="copy-link-btn">
+                        📋 Copy
+                    </button>
+                </div>
+                <div class="d-grid">
+                    <button class="btn btn-success" id="go-to-session-btn" style="background-color: var(--success-color); border-color: var(--success-color);">
+                        🔗 Go to Session
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const createSessionBtn = document.getElementById('create-session');
-    const startSessionBtn = document.getElementById('start-session');
+    // Theme Management
+    function toggleTheme() {
+        const body = document.body;
+        const isDark = body.getAttribute('data-theme') === 'dark';
+        body.setAttribute('data-theme', isDark ? 'light' : 'dark');
+        localStorage.setItem('theme', isDark ? 'light' : 'dark');
+    }
 
-    // 1. Show input for session ID
-    createSessionBtn.onclick = function () {
-        document.getElementById("session-id-enter").style.display = 'block';
+    // Load saved theme
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.body.setAttribute('data-theme', savedTheme);
+    document.getElementById('theme-toggle').checked = savedTheme === 'light';
+    document.getElementById('theme-toggle').addEventListener('change', toggleTheme);
+
+    // Session Management
+    let captchaToken = null;
+
+    // reCAPTCHA callbacks
+    window.onCaptchaSuccess = function(token) {
+        captchaToken = token;
+        const btn = document.getElementById('create-session-btn');
+        const btnText = document.getElementById('btn-text');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btnText.textContent = '🚀 Create New Session';
     };
 
-    // 2. Start session based on input
-    startSessionBtn.onclick = function () {
-        const sessionID = document.getElementById('session_id').value.trim();
+    window.onCaptchaExpired = function() {
+        captchaToken = null;
+        const btn = document.getElementById('create-session-btn');
+        const btnText = document.getElementById('btn-text');
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btnText.textContent = '🔒 Complete CAPTCHA to Create Session';
+    };
 
-        if (sessionID !== "") {
-            fetch("http://127.0.0.1:8000/session", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ session_id: sessionID })
-            })
-            .then(response => response.json())
-            .then(data => {
-                console.log("Session started:", data);
-                // redirect or show editor
-            })
-            .catch(error => {
-                console.error("Failed to start session:", error);
-            });
-        } else {
-            alert("Please enter a session ID.");
+    class SessionManager {
+        constructor() {
+            this.sessions = this.loadSessions();
+            this.renderSessions();
         }
-    };
+
+        loadSessions() {
+            const stored = localStorage.getItem('codingeSessions');
+            if (!stored) return [];
+
+            const sessions = JSON.parse(stored);
+            // Filter sessions from last 24 hours
+            const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+            return sessions.filter(session => session.createdAt > twentyFourHoursAgo);
+        }
+
+        saveSessions() {
+            localStorage.setItem('codingeSessions', JSON.stringify(this.sessions));
+        }
+
+        addSession(sessionId) {
+            const session = {
+                id: sessionId,
+                createdAt: Date.now(),
+                lastAccessed: Date.now()
+            };
+            this.sessions.unshift(session);
+            this.saveSessions();
+            this.renderSessions();
+        }
+
+        removeSession(sessionId) {
+            this.sessions = this.sessions.filter(s => s.id !== sessionId);
+            this.saveSessions();
+            this.renderSessions();
+        }
+
+        updateLastAccessed(sessionId) {
+            const session = this.sessions.find(s => s.id === sessionId);
+            if (session) {
+                session.lastAccessed = Date.now();
+                this.saveSessions();
+            }
+        }
+
+        formatTime(timestamp) {
+            const now = Date.now();
+            const diff = now - timestamp;
+            const minutes = Math.floor(diff / (1000 * 60));
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            return new Date(timestamp).toLocaleDateString();
+        }
+
+        renderSessions() {
+            const container = document.getElementById('sessions-container');
+
+            if (this.sessions.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📝</div>
+                        <h4>No recent sessions</h4>
+                        <p>Create your first coding session to get started!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = this.sessions.map(session => `
+                <div class="card session-card">
+                    <div class="session-header">
+                        <div>
+                            <div class="session-id">Session: ${session.id}</div>
+                            <div class="session-time">
+                                Created: ${this.formatTime(session.createdAt)} •
+                                Last accessed: ${this.formatTime(session.lastAccessed)}
+                            </div>
+                        </div>
+                        <div class="session-actions">
+                            <button class="btn btn-primary-custom btn-sm-custom" onclick="sessionManager.joinSession('${session.id}')">
+                                🔗 Join
+                            </button>
+                            <button class="btn btn-secondary-custom btn-sm-custom" onclick="sessionManager.copySessionLink('${session.id}')">
+                                📋 Copy Link
+                            </button>
+                            <button class="btn btn-danger-custom btn-sm-custom" onclick="sessionManager.removeSession('${session.id}')">
+                                🗑️ Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        joinSession(sessionId) {
+            this.updateLastAccessed(sessionId);
+            window.location.href = `/session/${sessionId}`;
+        }
+
+        copySessionLink(sessionId) {
+            const link = `${window.location.origin}/session/${sessionId}`;
+            navigator.clipboard.writeText(link).then(() => {
+                // Show temporary success feedback
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✅ Copied!';
+                btn.classList.add('btn-success');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('btn-success');
+                }, 2000);
+            });
+        }
+
+        async createSession() {
+            if (!captchaToken) {
+                alert('Please complete the CAPTCHA verification first.');
+                return;
+            }
+
+            const btn = document.getElementById('create-session-btn');
+            const spinner = document.getElementById('loading-spinner');
+            const btnText = document.getElementById('btn-text');
+
+            // Show loading state
+            spinner.style.display = 'inline-block';
+            btnText.textContent = 'Creating Session...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        captcha: captchaToken
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to create session');
+                }
+
+                const data = await response.json();
+                const sessionId = data.session_id;
+
+                // Add to local storage
+                this.addSession(sessionId);
+
+                // Show modal with session link
+                this.showSessionModal(sessionId);
+
+                // Reset reCAPTCHA
+                grecaptcha.reset();
+                captchaToken = null;
+
+            } catch (error) {
+                console.error('Error creating session:', error);
+                alert(`Failed to create session: ${error.message}`);
+
+                // Reset reCAPTCHA on error
+                grecaptcha.reset();
+                captchaToken = null;
+            } finally {
+                // Reset button state
+                spinner.style.display = 'none';
+                btnText.textContent = '🔒 Complete CAPTCHA to Create Session';
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+            }
+        }
+
+        showSessionModal(sessionId) {
+            const link = `${window.location.origin}/session/${sessionId}`;
+            document.getElementById('session-link').value = link;
+
+            const modal = new bootstrap.Modal(document.getElementById('sessionModal'));
+            modal.show();
+
+            // Set up modal button handlers
+            document.getElementById('copy-link-btn').onclick = () => {
+                navigator.clipboard.writeText(link).then(() => {
+                    const btn = document.getElementById('copy-link-btn');
+                    btn.innerHTML = '✅ Copied!';
+                    setTimeout(() => {
+                        btn.innerHTML = '📋 Copy';
+                    }, 2000);
+                });
+            };
+
+            document.getElementById('go-to-session-btn').onclick = () => {
+                this.updateLastAccessed(sessionId);
+                window.location.href = `/session/${sessionId}`;
+            };
+        }
+    }
+
+    // Initialize Session Manager
+    const sessionManager = new SessionManager();
+
+    // Event Listeners
+    document.getElementById('create-session-btn').addEventListener('click', () => {
+        sessionManager.createSession();
+    });
+
+    // Auto-refresh sessions every 30 seconds to update timestamps
+    setInterval(() => {
+        sessionManager.renderSessions();
+    }, 30000);
 </script>
 
 </body>

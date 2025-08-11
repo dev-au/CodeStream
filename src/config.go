@@ -18,6 +18,8 @@ type envData struct {
 	Languages        []string `env:"LANGUAGES"`
 	CodeWorkDir      string   `env:"CODE_WORK_DIR"`
 	RunTimeoutSecond int      `env:"RUN_TIMEOUT_SECOND"`
+	JwtToken         []byte   `env:"JWT_TOKEN"`
+	GoogleCaptchaKey string   `env:"GOOGLE_CAPTCHA_KEY"`
 }
 
 func (envData) SetupEnv() {
@@ -34,5 +36,7 @@ func (envData) SetupEnv() {
 		Languages:        strings.Split(os.Getenv("LANGUAGES"), ","),
 		CodeWorkDir:      os.Getenv("CODE_WORK_DIR"),
 		RunTimeoutSecond: runTimeoutSecond,
+		JwtToken:         []byte(os.Getenv("JWT_TOKEN")),
+		GoogleCaptchaKey: os.Getenv("GOOGLE_CAPTCHA_KEY"),
 	}
 }

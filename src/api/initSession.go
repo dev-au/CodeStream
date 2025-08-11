@@ -9,23 +9,25 @@ import (
 
 func CreateSession(c *gin.Context) {
 	var body struct {
-		SessionID string `json:"session_id"`
+		CaptchaResponse string `json:"captcha" binding:"required"`
 	}
-
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if body.SessionID == "" {
-		c.JSON(400, gin.H{"error": "session_id is empty"})
+
+	if !resources.ValidateCaptcha(body.CaptchaResponse) {
+		c.JSON(400, gin.H{"error": "Captcha error"})
 		return
 	}
+
 	cache := resources.NewCacheContext()
-	interview, err, created := resources.CreateInterviewSession(cache, body.SessionID)
-	if !created {
-		c.JSON(400, gin.H{"error": "session already exists"})
+	if !resources.CanCreateSession(cache, c.ClientIP()) {
+		c.JSON(429, gin.H{"error": "Too many sessions"})
 		return
 	}
+	interview, err, _ := resources.CreateInterviewSession(cache)
+
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

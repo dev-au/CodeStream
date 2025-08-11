@@ -2,8 +2,10 @@ package resources
 
 import (
 	"CodeStream/src"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strconv"
 	"time"
 )
@@ -32,24 +34,53 @@ type CodeState struct {
 	Version int64  `json:"version"`
 }
 
-func CreateInterviewSession(c *Cache, sessionID string) (Interview, error, bool) {
-	defaultLanguage := src.Config.Languages[0]
-	stateKey := fmt.Sprintf("session:%s:state", sessionID)
-	currentLanguageKey := fmt.Sprintf("session:%s:lang", sessionID)
-	versionKey := fmt.Sprintf("session:%s:version", sessionID)
-	patchKey := fmt.Sprintf("session:%s:patch", sessionID)
-
-	exists, err := c.Client.Exists(c.Ctx, stateKey).Result()
-	if err != nil {
-		return Interview{}, err, false
+func generateSessionID(length int) string {
+	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	result := make([]byte, length)
+	for i := 0; i < length; i++ {
+		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		result[i] = charset[num.Int64()]
 	}
-	if exists > 0 {
-		existInterview, err := GetInterviewSession(c, sessionID)
+	return string(result)
+}
+func CanCreateSession(c *Cache, ip string) bool {
+	key := "sessions_created:" + ip
+	count, err := c.Client.Incr(c.Ctx, key).Result()
+	if err != nil {
+		return false
+	}
+
+	if count == 1 {
+		c.Client.Expire(c.Ctx, key, time.Hour)
+	}
+
+	maxSessionsPerHour := 5
+	if count > int64(maxSessionsPerHour) {
+		return false
+	}
+	return true
+}
+
+func CreateInterviewSession(c *Cache) (Interview, error, bool) {
+	var sessionID string
+	var stateKey string
+	for i := 6; i < 100; i++ {
+		sessionID = generateSessionID(i / 2 * 2)
+		stateKey = fmt.Sprintf("session:%s:state", sessionID)
+		exists, err := c.Client.Exists(c.Ctx, stateKey).Result()
 		if err != nil {
 			return Interview{}, err, false
 		}
-		return existInterview, nil, false
+		if exists == 0 {
+			break
+		}
 	}
+
+	defaultLanguage := src.Config.Languages[0]
+
+	currentLanguageKey := fmt.Sprintf("session:%s:lang", sessionID)
+	versionKey := fmt.Sprintf("session:%s:version", sessionID)
+	patchKey := fmt.Sprintf("session:%s:patch", sessionID)
 
 	state := CodeState{
 		Content: "",

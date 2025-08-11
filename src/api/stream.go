@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -17,8 +18,8 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Consider restricting this in production
 	},
@@ -33,7 +34,7 @@ type Client struct {
 }
 
 type Hub struct {
-	Clients     map[*Client]bool
+	Clients     map[string]*Client
 	SessionID   string
 	Interview   *resources.Interview
 	mu          sync.RWMutex
@@ -61,19 +62,19 @@ const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 512
-	sendBufferSize = 256
+	maxMessageSize = 2048
+	sendBufferSize = 2048
 )
 
 func NewHub(sessionID string, cache *resources.Cache) (*Hub, error) {
-	interview, err, _ := resources.CreateInterviewSession(cache, sessionID)
+	interview, err := resources.GetInterviewSession(cache, sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create interview session: %w", err)
+		return nil, fmt.Errorf("failed to get interview session: %w", err)
 	}
 
 	return &Hub{
 		SessionID:  sessionID,
-		Clients:    make(map[*Client]bool),
+		Clients:    make(map[string]*Client),
 		Interview:  &interview,
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
@@ -109,14 +110,13 @@ func (h *Hub) run() {
 		select {
 		case client := <-h.register:
 			h.mu.Lock()
-			h.Clients[client] = true
+			h.Clients[client.Username] = client
 			clientCount := len(h.Clients)
 			h.mu.Unlock()
 
 			log.Printf("Client %s joined session %s. Total clients: %d",
 				client.Username, h.SessionID, clientCount)
 
-			// Notify others about new user
 			msg := Message{
 				Type: "user_joined",
 				Data: map[string]interface{}{
@@ -132,8 +132,8 @@ func (h *Hub) run() {
 
 		case client := <-h.unregister:
 			h.mu.Lock()
-			if _, ok := h.Clients[client]; ok {
-				delete(h.Clients, client)
+			if _, ok := h.Clients[client.Username]; ok {
+				delete(h.Clients, client.Username)
 				close(client.Send)
 			}
 			clientCount := len(h.Clients)
@@ -168,7 +168,7 @@ func (h *Hub) run() {
 			h.mu.Lock()
 			clientsToRemove := make([]*Client, 0)
 
-			for client := range h.Clients {
+			for _, client := range h.Clients {
 				select {
 				case client.Send <- message:
 				default:
@@ -177,7 +177,7 @@ func (h *Hub) run() {
 			}
 
 			for _, client := range clientsToRemove {
-				delete(h.Clients, client)
+				delete(h.Clients, client.Username)
 				close(client.Send)
 				log.Printf("Removed unresponsive client: %s", client.Username)
 			}
@@ -185,11 +185,11 @@ func (h *Hub) run() {
 
 		case <-h.shutdown:
 			h.mu.Lock()
-			for client := range h.Clients {
+			for _, client := range h.Clients {
 				close(client.Send)
 				_ = client.Conn.Close()
 			}
-			h.Clients = make(map[*Client]bool)
+			h.Clients = make(map[string]*Client)
 			h.mu.Unlock()
 			return
 		}
@@ -201,7 +201,7 @@ func (h *Hub) broadcastToOthers(sender *Client, msg []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	for client := range h.Clients {
+	for _, client := range h.Clients {
 		if client != sender {
 			select {
 			case client.Send <- msg:
@@ -306,14 +306,10 @@ func (c *Client) readPump() {
 			}
 		case "code_run":
 			c.processRunCode()
-		case "cursor_position":
-			c.processCursorPosition(msg)
 		case "cursor_select":
 			c.processCursorSelect(msg)
-
 		case "edit_lang":
 			c.processEditLang(msg)
-
 		case "refresh":
 			c.sendCurrentState()
 
@@ -342,7 +338,7 @@ func (c *Client) processRunCode() {
 
 	if currentCode == "" {
 		msg := Message{
-			Type: "code_run",
+			Type: "code_res",
 			Data: map[string]interface{}{
 				"std_out":   "",
 				"std_err":   "",
@@ -394,9 +390,9 @@ func (c *Client) sendCurrentState() {
 	c.Hub.interviewMu.Unlock()
 
 	var users []map[string]string
-	for user, _ := range c.Hub.Clients {
+	for username, _ := range c.Hub.Clients {
 		users = append(users, map[string]string{
-			"username": user.Username,
+			"username": username,
 		})
 	}
 
@@ -409,6 +405,7 @@ func (c *Client) sendCurrentState() {
 			"version":      version,
 			"patches":      patches,
 			"users":        users,
+			"username":     c.Username,
 		},
 	}
 
@@ -507,32 +504,6 @@ func (c *Client) processCursorSelect(msg Message) {
 	msgBytes, _ := json.Marshal(broadcastMsg)
 	c.Hub.broadcastToOthers(c, msgBytes)
 }
-
-func (c *Client) processCursorPosition(msg Message) {
-	posVal, ok := msg.Data["position"]
-	if !ok {
-		log.Printf("Missing position data in cursor_position message from %s", c.Username)
-		return
-	}
-
-	position, ok := posVal.(int)
-	if !ok {
-		log.Printf("Invalid position type in cursor_position message from %s", c.Username)
-		return
-	}
-	broadcastMsg := Message{
-		Type: "cursor_position",
-		Data: map[string]interface{}{
-			"username": c.Username,
-			"position": position,
-		},
-	}
-
-	msgBytes, _ := json.Marshal(broadcastMsg)
-
-	c.Hub.broadcastToOthers(c, msgBytes)
-}
-
 func (c *Client) processEditLang(msg Message) {
 	newLang, ok := msg.Data["lang"].(string)
 	if !ok {
@@ -584,12 +555,16 @@ func (c *Client) processEditLang(msg Message) {
 
 func LiveStreamCoding(c *gin.Context) {
 	sessionID := c.Query("session_id")
-	username := c.Query("username")
 
-	if sessionID == "" || username == "" {
+	if sessionID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "session_id and username query parameters are required",
+			"error": "session_id query parameters is required",
 		})
+		return
+	}
+
+	if hub, exists := Sessions[sessionID]; exists && len(hub.Clients) >= 300 {
+		c.JSON(400, gin.H{"error": "Too many users"})
 		return
 	}
 
@@ -619,18 +594,26 @@ func LiveStreamCoding(c *gin.Context) {
 		_ = conn.Close()
 		return
 	}
-
+	hub.interviewMu.Lock()
+	username := fmt.Sprintf("User%d", rand.Intn(360)+1)
+	for {
+		if _, exists := hub.Clients[username]; !exists {
+			break
+		}
+		username = fmt.Sprintf("User%d", rand.Intn(360)+1)
+	}
 	client := &Client{
 		Username: username,
 		Conn:     conn,
 		Hub:      hub,
 		Send:     make(chan []byte, sendBufferSize),
 	}
+	hub.interviewMu.Unlock()
 
 	hub.register <- client
-	go client.writePump()
-
 	client.sendCurrentState()
 
+	go client.writePump()
 	client.readPump()
+
 }
