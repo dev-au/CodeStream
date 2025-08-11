@@ -18,8 +18,6 @@ var runners = map[string]struct {
 	Cmd   string
 }{
 	"python":     {"runner-python:latest", "python3 %s"},
-	"go":         {"runner-go:latest", "go run %s"},
-	"cpp":        {"runner-cpp:latest", "bash -lc 'g++ %s -O2 -std=c++17 -o /tmp/a && /tmp/a'"},
 	"javascript": {"runner-node:latest", "node %s"},
 }
 
@@ -79,14 +77,14 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 		"run", "--rm", "--name", containerName,
 		"--network=none",
 		"--pids-limit=64",
-		"--memory=25m",
-		"--cpus=0.5",
+		"--memory=50m",
+		"--cpus=1",
 		"--read-only",
 		"--security-opt", "no-new-privileges",
 		"-v", fmt.Sprintf("%s:/app/%s:ro", hostPath, fname),
 		"-w", "/app",
 		lang.Image,
-		"sh", "-lc", fmt.Sprintf(lang.Cmd, containerPath),
+		"sh", "-c", fmt.Sprintf(lang.Cmd, containerPath),
 	}
 
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Duration(src.Config.RunTimeoutSecond)*time.Second)
@@ -143,7 +141,7 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 		if res.ExitCode == 137 {
 			res.Error = "Memory Limit Error"
 		}
-
+		exec.Command("docker", "kill", containerName).Run()
 		return res, nil
 	}
 }
@@ -152,10 +150,6 @@ func filenameForLang(lang string) string {
 	switch lang {
 	case "python":
 		return "main.py"
-	case "go":
-		return "main.go"
-	case "cpp":
-		return "main.cpp"
 	case "javascript":
 		return "main.js"
 	default:
