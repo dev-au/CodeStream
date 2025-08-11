@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24.4-alpine AS builder
 
 WORKDIR /app
 
@@ -18,3 +18,6 @@ EXPOSE 8000
 
 ENV DOCKER_HOST=unix:///var/run/docker.sock
 CMD ["./platform"]
+
+
+# docker build -t runner-node:latest runner-images/runner-node
