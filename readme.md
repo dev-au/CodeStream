@@ -15,7 +15,7 @@ cd CodeStream
 
 ### 2. Build and run with Docker Compose
 
-docker-compose up --build
+`docker-compose up --build`
 
 This will start the full platform including backend, frontend, and runner services.
 
@@ -29,7 +29,6 @@ Open your browser at:
 ## 🛠 Build Runner Images
 
 Each language has its own Dockerfile under `runner-images/<lang>`.
-For example:
 
 ```bash
 # Python runner
@@ -39,10 +38,3 @@ docker build -t runner-python:latest runner-images/runner-python
 docker build -t runner-node:latest runner-images/runner-node
 ```
 ---
-
-## ⚙️ Tech Stack
-
-* Backend: Go (Gin, WebSocket, Redis)
-* Execution Layer: Docker runner images
-* Storage: Redis
-
