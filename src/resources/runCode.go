@@ -13,12 +13,47 @@ import (
 	"time"
 )
 
-var runners = map[string]struct {
-	Image string
-	Cmd   string
-}{
-	"python":     {"runner-python:latest", "python3 %s"},
-	"javascript": {"runner-node:latest", "node %s"},
+type RunnerConfig struct {
+	Image     string
+	Cmd       string
+	Memory    string
+	CPUs      string
+	ExtraArgs []string
+}
+
+var runners = map[string]RunnerConfig{
+	"python": {
+		Image:  "runner-python:latest",
+		Cmd:    "python3 %s",
+		Memory: "50m",
+		CPUs:   "0.5",
+	},
+	"javascript": {
+		Image:  "runner-node:latest",
+		Cmd:    "node %s",
+		Memory: "50m",
+		CPUs:   "0.5",
+	},
+	"go": {
+		Image:  "runner-go:latest",
+		Cmd:    "go run %s",
+		Memory: "50m",
+		CPUs:   "1",
+		ExtraArgs: []string{
+			"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=50m",
+			"-v", "/var/go-cache:/root/.cache:rw",
+			"-v", "go-build-cache:/root/.cache/go-build",
+		},
+	},
+	"cpp": {
+		Image:  "runner-cpp:latest",
+		Cmd:    "bash -lc 'g++ %s -O2 -std=c++17 -o /tmp/a && /tmp/a'",
+		Memory: "50m",
+		CPUs:   "1",
+		ExtraArgs: []string{
+			"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=50m",
+		},
+	},
 }
 
 type RunRequest struct {
@@ -51,6 +86,7 @@ func (lw *LimitedWriter) Write(p []byte) (int, error) {
 	}
 	return lw.Buf.Write(p)
 }
+
 func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunResponse, error) {
 	lang, ok := runners[req.Language]
 	if !ok {
@@ -77,16 +113,16 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 		"run", "--rm", "--name", containerName,
 		"--network=none",
 		"--pids-limit=64",
-		"--memory=50m",
-		"--cpus=1",
+		"--memory=" + lang.Memory,
+		"--cpus=" + lang.CPUs,
 		"--read-only",
 		"--security-opt", "no-new-privileges",
 		"-v", fmt.Sprintf("%s:/app/%s:ro", hostPath, fname),
 		"-w", "/app",
-		lang.Image,
-		"sh", "-c", fmt.Sprintf(lang.Cmd, containerPath),
 	}
 
+	dockerArgs = append(dockerArgs, lang.ExtraArgs...)
+	dockerArgs = append(dockerArgs, lang.Image, "sh", "-c", fmt.Sprintf(lang.Cmd, containerPath))
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Duration(src.Config.RunTimeoutSecond)*time.Second)
 	defer cancel()
 
@@ -108,7 +144,7 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 
 	select {
 	case <-ctxTimeout.Done():
-		exec.Command("docker", "kill", containerName).Run()
+		_ = exec.Command("docker", "kill", containerName).Run()
 		return &RunResponse{
 			Error:    "Time Limit Error",
 			ExitCode: -1,
@@ -116,7 +152,7 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 		}, nil
 
 	case err := <-errCh:
-		exec.Command("docker", "kill", containerName).Run()
+		_ = exec.Command("docker", "kill", containerName).Run()
 		duration := time.Since(start)
 		res := &RunResponse{
 			Stdout:   stdoutLimit.Buf.String(),
@@ -141,7 +177,6 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 		if res.ExitCode == 137 {
 			res.Error = "Memory Limit Error"
 		}
-		exec.Command("docker", "kill", containerName).Run()
 		return res, nil
 	}
 }
@@ -152,12 +187,17 @@ func filenameForLang(lang string) string {
 		return "main.py"
 	case "javascript":
 		return "main.js"
+	case "go":
+		return "main.go"
+	case "cpp":
+		return "main.cpp"
 	default:
 		return "code.txt"
 	}
 }
 
 func randString(n int) string {
+	rand.Seed(time.Now().UnixNano())
 	letters := []rune("abcdefghijklmnopqrstuvwxyz0123456789")
 	b := make([]rune, n)
 	for i := range b {

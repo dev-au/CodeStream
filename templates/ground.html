@@ -8,7 +8,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/codemirror.min.css">
     <!-- Multiple Editor Themes -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/theme/one-dark.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/theme/material-darker.min.css">
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/theme/material-darker.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/theme/dracula.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/theme/monokai.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.19/theme/eclipse.min.css">
@@ -79,7 +80,7 @@
             background-color: var(--bg-tertiary);
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease;
         }
 
@@ -262,9 +263,15 @@
         }
 
         @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+            100% {
+                opacity: 1;
+            }
         }
 
         .output-header {
@@ -369,6 +376,8 @@
         <select id="lang-select" class="form-select" style="width: auto;">
             <option value="python">Python</option>
             <option value="javascript">JavaScript</option>
+            <option value="go">Go</option>
+            <option value="cpp">C++</option>
         </select>
     </div>
 
@@ -444,7 +453,7 @@
             this.fontSize = 14;
             this.editor = CodeMirror(document.getElementById('coding-box'), {
                 value: "",
-                mode: "javascript",
+                mode: "python",
                 theme: "elegant",
                 lineNumbers: true,
                 indentUnit: 4,
@@ -455,14 +464,21 @@
             });
             this.isUpdating = false;
             this.syncedContent = "";
-            this.language = "javascript";
+            this.language = "python";
             this.updateFontSize();
         }
 
         setLanguage(lang) {
             this.language = lang;
-            this.editor.setOption('mode', lang);
+            let modeMap = {
+                "python": "python",
+                "javascript": "javascript",
+                "go": "go",
+                "cpp": "text/x-c++src"
+            };
+            this.editor.setOption("mode", modeMap[lang] || "plaintext");
         }
+
 
         setTheme(theme) {
             this.editor.setOption('theme', theme);
