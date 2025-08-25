@@ -42,6 +42,7 @@ var runners = map[string]RunnerConfig{
 		ExtraArgs: []string{
 			"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=50m",
 			"-v", "/var/go-cache:/root/.cache:rw",
+			"-v", "/var/go-cache:/go-cache:rw",
 			"-v", "go-build-cache:/root/.cache/go-build",
 		},
 	},
