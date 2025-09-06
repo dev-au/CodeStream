@@ -59,7 +59,7 @@ var (
 )
 
 const (
-	writeWait      = 10 * time.Second
+	writeWait      = 60 * time.Second
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 2048
@@ -234,7 +234,6 @@ func (c *Client) writePump() {
 		case message, ok := <-c.Send:
 			_ = c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				// Hub closed the channel
 				_ = c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -305,7 +304,7 @@ func (c *Client) readPump() {
 				}
 			}
 		case "code_run":
-			c.processRunCode()
+			go c.processRunCode()
 		case "cursor_select":
 			c.processCursorSelect(msg)
 		case "edit_lang":
