@@ -27,19 +27,19 @@ var runners = map[string]RunnerConfig{
 		Image:  "runner-python:latest",
 		Cmd:    "/usr/bin/time -f \"%%M,%%e\" python3 %s",
 		Memory: "50m",
-		CPUs:   "0.5",
+		CPUs:   "1",
 	},
 	"javascript": {
 		Image:  "runner-node:latest",
 		Cmd:    "/usr/bin/time -f \"%%M,%%e\" node %s",
 		Memory: "50m",
-		CPUs:   "0.5",
+		CPUs:   "1",
 	},
 	"go": {
 		Image:  "runner-go:latest",
 		Cmd:    "bash -lc 'PATH=$PATH:/usr/local/go/bin go build -o /tmp/a %s && /usr/bin/time -f \"%%M,%%e\" /tmp/a'",
-		Memory: "500m",
-		CPUs:   "1",
+		Memory: "50m",
+		CPUs:   "2",
 		ExtraArgs: []string{
 			"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=50m",
 			"-v", "/var/go-cache:/root/.cache:rw",
@@ -51,7 +51,7 @@ var runners = map[string]RunnerConfig{
 		Image:  "runner-cpp:latest",
 		Cmd:    "bash -lc 'g++ %s -O2 -std=c++17 -o /tmp/a && /usr/bin/time -f \"%%M,%%e\" /tmp/a'",
 		Memory: "50m",
-		CPUs:   "1",
+		CPUs:   "2",
 		ExtraArgs: []string{
 			"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=50m",
 		},
@@ -68,7 +68,6 @@ type RunResponse struct {
 	Stderr   string `json:"stderr"`
 	ExitCode int    `json:"exit_code"`
 	Error    string `json:"error,omitempty"`
-	Duration string `json:"duration"`
 	Info     string `json:"info,omitempty"`
 }
 
