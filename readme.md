@@ -19,17 +19,8 @@ cd CodeStream
 Each language has its own Dockerfile under `runner-images/<lang>`.
 
 ```bash
-# Python runner
-docker build -t runner-python:latest runner-images/runner-python
-
-# JavaScript runner
-docker build -t runner-node:latest runner-images/runner-node
-
-# Go runner
-docker build -t runner-go:latest runner-images/runner-go
-
-# C++ runner
-docker build -t runner-cpp:latest runner-images/runner-cpp
+# All runner
+docker build -f runner.Dockerfile -t runner-code:latest .
 ```
 
 ### 3. Build and run with Docker Compose

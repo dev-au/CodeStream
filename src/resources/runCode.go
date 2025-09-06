@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,20 +25,20 @@ type RunnerConfig struct {
 var runners = map[string]RunnerConfig{
 	"python": {
 		Image:  "runner-python:latest",
-		Cmd:    "python3 %s",
+		Cmd:    "/usr/bin/time -f \"%%M,%%e\" python3 %s",
 		Memory: "50m",
 		CPUs:   "0.5",
 	},
 	"javascript": {
 		Image:  "runner-node:latest",
-		Cmd:    "node %s",
+		Cmd:    "/usr/bin/time -f \"%%M,%%e\" node %s",
 		Memory: "50m",
 		CPUs:   "0.5",
 	},
 	"go": {
 		Image:  "runner-go:latest",
-		Cmd:    "go run %s",
-		Memory: "50m",
+		Cmd:    "bash -lc 'PATH=$PATH:/usr/local/go/bin go build -o /tmp/a %s && /usr/bin/time -f \"%%M,%%e\" /tmp/a'",
+		Memory: "500m",
 		CPUs:   "1",
 		ExtraArgs: []string{
 			"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=50m",
@@ -48,7 +49,7 @@ var runners = map[string]RunnerConfig{
 	},
 	"cpp": {
 		Image:  "runner-cpp:latest",
-		Cmd:    "bash -lc 'g++ %s -O2 -std=c++17 -o /tmp/a && /tmp/a'",
+		Cmd:    "bash -lc 'g++ %s -O2 -std=c++17 -o /tmp/a && /usr/bin/time -f \"%%M,%%e\" /tmp/a'",
 		Memory: "50m",
 		CPUs:   "1",
 		ExtraArgs: []string{
@@ -68,6 +69,7 @@ type RunResponse struct {
 	ExitCode int    `json:"exit_code"`
 	Error    string `json:"error,omitempty"`
 	Duration string `json:"duration"`
+	Info     string `json:"info,omitempty"`
 }
 
 type LimitedWriter struct {
@@ -123,7 +125,7 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 	}
 
 	dockerArgs = append(dockerArgs, lang.ExtraArgs...)
-	dockerArgs = append(dockerArgs, lang.Image, "sh", "-c", fmt.Sprintf(lang.Cmd, containerPath))
+	dockerArgs = append(dockerArgs, "runner-code:latest", "sh", "-c", fmt.Sprintf(lang.Cmd, containerPath))
 	ctxTimeout, cancel := context.WithTimeout(ctx, time.Duration(src.Config.RunTimeoutSecond)*time.Second)
 	defer cancel()
 
@@ -137,7 +139,6 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 	cmd.Stderr = stderrLimit
 
 	errCh := make(chan error, 1)
-	start := time.Now()
 
 	go func() {
 		errCh <- cmd.Run()
@@ -149,16 +150,13 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 		return &RunResponse{
 			Error:    "Time Limit Error",
 			ExitCode: -1,
-			Duration: time.Since(start).String(),
 		}, nil
 
 	case err := <-errCh:
 		_ = exec.Command("docker", "kill", containerName).Run()
-		duration := time.Since(start)
 		res := &RunResponse{
 			Stdout:   stdoutLimit.Buf.String(),
 			Stderr:   stderrLimit.Buf.String(),
-			Duration: duration.String(),
 			ExitCode: 0,
 		}
 
@@ -178,6 +176,31 @@ func RunUserCode(ctx context.Context, baseWorkdir string, req RunRequest) (*RunR
 		if res.ExitCode == 137 {
 			res.Error = "Memory Limit Error"
 		}
+		setInfo := func() {
+			res.Stderr = strings.TrimSpace(res.Stderr)
+			lines := strings.Split(res.Stderr, "\n")
+			last := strings.TrimSpace(lines[len(lines)-1])
+			parts := strings.Split(last, ",")
+			if len(parts) != 2 {
+				return
+			}
+			memoryKB, err := strconv.Atoi(parts[0])
+			if err != nil {
+				return
+			}
+			timeSec, err := strconv.ParseFloat(parts[1], 64)
+			if err != nil {
+				return
+			}
+			timeMs := int(timeSec * 1000)
+			res.Info = fmt.Sprintf(
+				"💾 Runtime Memory: %dmb\n⏱️ Runtime Performance: %dms", memoryKB/1024, timeMs,
+			)
+			res.Stderr = res.Stderr[:len(res.Stderr)-len(last)]
+
+		}
+		setInfo()
+
 		return res, nil
 	}
 }

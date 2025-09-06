@@ -374,7 +374,7 @@ func (c *Client) processRunCode() {
 			"std_err":   resp.Stderr,
 			"exit_code": resp.ExitCode,
 			"error":     resp.Error,
-			"duration":  resp.Duration,
+			"info":      resp.Info,
 		},
 	}
 	msgBytes, _ := json.Marshal(msg)
