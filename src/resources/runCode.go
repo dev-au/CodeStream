@@ -38,7 +38,7 @@ var runners = map[string]RunnerConfig{
 	"go": {
 		Image:  "runner-go:latest",
 		Cmd:    "bash -lc 'PATH=$PATH:/usr/local/go/bin go build -o /tmp/a %s && /usr/bin/time -f \"%%M,%%e\" /tmp/a'",
-		Memory: "512m",
+		Memory: "100m",
 		CPUs:   "2",
 		ExtraArgs: []string{
 			"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=50m",
@@ -50,7 +50,7 @@ var runners = map[string]RunnerConfig{
 	"cpp": {
 		Image:  "runner-cpp:latest",
 		Cmd:    "bash -lc 'g++ %s -O2 -std=c++17 -o /tmp/a && /usr/bin/time -f \"%%M,%%e\" /tmp/a'",
-		Memory: "50m",
+		Memory: "100m",
 		CPUs:   "2",
 		ExtraArgs: []string{
 			"--tmpfs", "/tmp:rw,exec,nosuid,nodev,size=50m",
