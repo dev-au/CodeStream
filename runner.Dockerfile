@@ -22,23 +22,3 @@ ENV PATH="/usr/local/go/bin:${PATH}" \
 
 RUN mkdir -p /go-cache /go-mod-cache && go version
 RUN go install std
-
-
-FROM base AS deps
-WORKDIR /app
-
-COPY go.mod go.sum ./
-RUN go mod download
-
-
-FROM base AS final
-WORKDIR /app
-
-COPY --from=deps /go-mod-cache /go-mod-cache
-COPY --from=deps /go-cache /go-cache
-
-COPY . .
-
-RUN go mod tidy
-
-CMD ["/bin/bash"]
