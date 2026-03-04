@@ -21,7 +21,7 @@ var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Consider restricting this in production
+		return true
 	},
 }
 
@@ -155,7 +155,6 @@ func (h *Hub) run() {
 			}
 			h.broadcastToOthers(client, msgBytes)
 
-			// Clean up empty sessions
 			if clientCount == 0 {
 				sessionsMu.Lock()
 				delete(Sessions, h.SessionID)
@@ -206,7 +205,6 @@ func (h *Hub) broadcastToOthers(sender *Client, msg []byte) {
 			select {
 			case client.Send <- msg:
 			default:
-				// Channel full, client will be cleaned up in next broadcast cycle
 				log.Printf("Client %s channel full, will be cleaned up", client.Username)
 			}
 		}

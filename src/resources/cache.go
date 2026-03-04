@@ -38,7 +38,6 @@ func SetupRedis() {
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		panic(fmt.Sprintf("failed to connect to Redis: %s", err))
-		return
 	}
 	RedisClient = rdb
 }
@@ -76,7 +75,6 @@ func (c *Cache) GetTTL(key string) time.Duration {
 	r, err := c.Client.TTL(c.Ctx, key).Result()
 	if err != nil {
 		panic(err)
-		return 0
 	}
 	return r
 }
