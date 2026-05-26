@@ -1,20 +1,43 @@
 services:
   app:
-    image: livecodingapp:latest
     build: .
+    container_name: codestream
     ports:
-      - "${PORT}:8000"
+      - "8000:8000"
     env_file:
       - .env
+    environment:
+      POSTGRESQL_HOST: POSTGRESQL
+      MONGO_HOST: mongo
+      RABBITMQ_HOST: rabbitmq
     volumes:
-      - /tmp/code-runner-work:/tmp/code-runner-work
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./.env:/app/.env
+      - ./migrations:/app/migrations
     depends_on:
-      - cache
-    restart: unless-stopped
-
-
-  cache:
-    image: redis:8
-    container_name: livecodingcache
+      POSTGRESQL:
+        condition: service_healthy
     restart: always
+
+  postgresql:
+    image: postgres:latest
+    container_name: codestream-postgressql
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      POSTGRESQL_ROOT_PASSWORD: "${POSTGRESQL_PASSWORD}"
+      POSTGRESQL_DATABASE: "${POSTGRESQL_DATABASE}"
+      POSTGRESQL_USER: "${POSTGRESQL_USER}"
+      POSTGRESQL_PASSWORD: "${POSTGRESQL_PASSWORD}"
+    volumes:
+      - POSTGRESQL_data:/var/lib/POSTGRESQL
+    healthcheck:
+      test: [ "CMD", "POSTGRESQLadmin", "ping", "-h", "localhost", "-u${POSTGRESQL_USER}", "-p${POSTGRESQL_PASSWORD}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgresql_data:
+  mongo_data:
+  rabbitmq_data:
