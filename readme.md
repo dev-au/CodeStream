@@ -10,7 +10,7 @@ sessions seamlessly.
 
 ### 1. Clone the repository
 
-git clone [https://github.com/dev-au/CodeStream.git](https://github.com/dev-au/CodeStream.git)
+git clone [https://github.com/abdulloh-umar/CodeStream.git](https://github.com/abdulloh-umar/CodeStream.git)
 cd CodeStream
 
 
